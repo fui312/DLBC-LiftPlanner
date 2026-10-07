@@ -80,10 +80,10 @@ function render(files) {
       '<span><span class="file-name"></span><span class="file-meta"></span></span>' +
       '<span class="type-pill ' + file.type + '"></span>';
     row.querySelector(".file-name").textContent = file.name;
-    row.querySelector(".file-meta").textContent = formatOpened(file.openedAt) + " \u00b7 sample";
+    row.querySelector(".file-meta").textContent = formatOpened(file.openedAt) + " · sample";
     row.querySelector(".type-pill").textContent = file.typeLabel;
     row.addEventListener("click", function () {
-      row.querySelector(".file-meta").textContent = "Opens in a later view \u00b7 " + file.typeLabel;
+      row.querySelector(".file-meta").textContent = "Opens in a later view · " + file.typeLabel;
     });
     item.append(row);
     list.append(item);
@@ -103,14 +103,105 @@ scrim.addEventListener("click", function () {
   setMenu(false);
 });
 
+render(SAMPLE_RECENTS);
+
+const SETTINGS_KEY = "dlbc.settings";
+const IMPERIAL_REGIONS = { US: true, LR: true, MM: true };
+const homeView = document.getElementById("homeView");
+const settingsView = document.getElementById("settingsView");
+const pageTitle = document.getElementById("pageTitle");
+const pageLede = document.getElementById("pageLede");
+const unitsHelp = document.getElementById("unitsHelp");
+const advancedSwitch = document.getElementById("advancedSwitch");
+
+function regionCode() {
+  const locale = navigator.language || "";
+  try {
+    const region = new Intl.Locale(locale).region;
+    if (region) return region;
+  } catch (err) {
+    /* older browsers */
+  }
+  const parts = locale.split("-");
+  return parts.length > 1 ? parts[parts.length - 1].toUpperCase() : "";
+}
+
+function defaultUnits() {
+  return IMPERIAL_REGIONS[regionCode()] ? "imperial" : "metric";
+}
+
+function loadSettings() {
+  const defaults = { units: defaultUnits(), theme: "dark", advanced: false };
+  try {
+    const saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "{}");
+    return {
+      units: saved.units === "imperial" || saved.units === "metric" ? saved.units : defaults.units,
+      theme: saved.theme === "light" || saved.theme === "dark" ? saved.theme : defaults.theme,
+      advanced: saved.advanced === true
+    };
+  } catch (err) {
+    return defaults;
+  }
+}
+
+let settings = loadSettings();
+
+function saveSettings() {
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+}
+
+function applySettings() {
+  document.documentElement.dataset.theme = settings.theme;
+  document.querySelectorAll("[data-setting='units']").forEach(function (btn) {
+    btn.classList.toggle("is-selected", btn.dataset.value === settings.units);
+  });
+  document.querySelectorAll("[data-setting='theme']").forEach(function (btn) {
+    btn.classList.toggle("is-selected", btn.dataset.value === settings.theme);
+  });
+  advancedSwitch.classList.toggle("is-on", settings.advanced);
+  advancedSwitch.setAttribute("aria-checked", settings.advanced ? "true" : "false");
+  const region = regionCode() || "unknown";
+  const suggested = defaultUnits();
+  unitsHelp.textContent = "Browser region " + region + " suggests " + suggested + ". Stored choice is " + settings.units + ".";
+}
+
+function showView(name) {
+  const settingsOpen = name === "settings";
+  settingsView.hidden = !settingsOpen;
+  homeView.hidden = settingsOpen;
+  pageTitle.textContent = settingsOpen ? "Settings" : "Home";
+  pageLede.textContent = settingsOpen
+    ? "Units, theme, and Advanced Mode for this browser."
+    : "Recent studies on this device. Sample rows until local files exist.";
+}
+
 document.querySelectorAll(".nav-btn:not(.is-dummy)").forEach(function (btn) {
   btn.addEventListener("click", function () {
     document.querySelectorAll(".nav-btn").forEach(function (other) {
       other.classList.remove("is-active");
     });
     btn.classList.add("is-active");
+    showView(btn.dataset.view);
     setMenu(false);
   });
 });
 
-render(SAMPLE_RECENTS);
+document.querySelectorAll(".segment-btn").forEach(function (btn) {
+  btn.addEventListener("click", function () {
+    settings[btn.dataset.setting] = btn.dataset.value;
+    saveSettings();
+    applySettings();
+  });
+});
+
+advancedSwitch.addEventListener("click", function () {
+  settings.advanced = !settings.advanced;
+  saveSettings();
+  applySettings();
+});
+
+applySettings();
+if (location.hash === "#settings") {
+  const settingsBtn = document.querySelector("[data-view='settings']");
+  if (settingsBtn) settingsBtn.click();
+}
